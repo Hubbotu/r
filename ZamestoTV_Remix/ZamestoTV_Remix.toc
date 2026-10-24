@@ -1,0 +1,12 @@
+## Interface: 120105
+## Title: Remix Test Addon
+## Notes: Tracking Feats of Strength that can still be obtained.
+## Notes-ruRU: Отслеживание Великих подвигов, которые всё ещё можно получить.
+## Author: ZamestoTV
+## Version: 2.2
+## IconTexture: Interface\AddOns\ZamestoTV_Remix\Icons\goblin
+
+## Category-enUS: Addons ZamestoTV
+## Category-ruRU: Аддоны ZamestoTV
+
+RemixTracker.lua
