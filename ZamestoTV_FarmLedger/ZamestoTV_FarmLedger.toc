@@ -1,7 +1,7 @@
 ## Interface: 120105
 ## Title: Farm Ledger
 ## Notes: Tracks the value of specific farmed items per day, week (Mon-Fri) and month using Oribos Exchange or Auctionator prices.
-## Version: 1.0.0
+## Version: 2.1.0
 ## SavedVariables: FarmLedgerDB
 ## OptionalDeps: OribosExchange, Auctionator
 ## IconTexture: Interface\AddOns\ZamestoTV_FarmLedger\Icons\goblin

@@ -10,19 +10,104 @@
 local ADDON_NAME, ns = ...
 
 -------------------------------------------------------------------------------
--- Tracked items: { itemID, iconFileID }
+-- Tracked items.  Window tabs (left column) > groups (expansions, right column)
+--   every item is { itemID, iconFileID }
+-- To add an item later, append it to the `items` table of the right group.
+-- Empty groups are kept on purpose so there is already a slot ready to fill.
 -------------------------------------------------------------------------------
-local ITEMS = {
-    { 67151, 433440 },   { 52496, 134941 },   { 52494, 134941 },   { 52495, 134941 },
-    { 67541, 134941 },   { 71965, 134941 },   { 69843, 376833 },   { 92426, 666474 },
-    { 181267, 3386335 }, { 181265, 3860399 }, { 181266, 3860398 }, { 181172, 2027855 },
-    { 108631, 879998 },  { 108633, 1035038 }, { 108634, 1035047 }, { 180869, 656319 },
-    { 205463, 1032477 }, { 205419, 133841 },  { 119431, 136221 },  { 128315, 237560 },
-    { 128314, 236313 },  { 128671, 1245298 }, { 207702, 4622301 }, { 22682, 134422 },
-    { 206604, 133124 },  { 206605, 135042 },  { 206606, 132627 },  { 206607, 132614 },
-    { 206608, 132965 },  { 206609, 132524 },  { 206610, 134693 },  { 206611, 132548 },
-    { 1604, 135323 },
+local ZG_ICON = 1500867                      -- shared icon of the Zul'Gurub set items (2038xx / 203968)
+local ZG_FARM = {
+    { 20520, 136192 }, { 12655, 133229 }, { 14256, 132888 }, { 19931, 134711 },   -- own icons
 }
+for _, id in ipairs({
+    203831, 203834, 203838, 203826, 203833, 203829, 203840, 203847, 203843, 203849,
+    203845, 203830, 203841, 203861, 203842, 203851, 203837, 203848, 203832, 203824,
+    203828, 203850, 203968, 203839, 203836, 203827, 203846, 203835, 203825, 203844,
+}) do ZG_FARM[#ZG_FARM + 1] = { id, ZG_ICON } end
+
+-- Zul'Gurub exchange: { itemID, iconFileID, amount needed for ONE reward }
+local ZG_EXCHANGE = {
+    { 203772, 132533, 2 }, { 203768, 132529, 3 }, { 203767, 132528, 3 },
+    { 203766, 132527, 2 }, { 203771, 132532, 3 }, { 203769, 132530, 2 },
+    { 203773, 132534, 3 }, { 203770, 132531, 2 }, { 203765, 132526, 3 },
+}
+local ZG_REWARD = { 203959, 901746 }         -- 1 reward per exchange set
+
+local TABS = {
+    {
+        key = "general", kind = "list", expansions = true,
+        groups = {
+            { name = "Vanilla", items = {
+                { 1604, 135323 },
+            } },
+            { name = "The Burning Crusade", items = {} },
+            { name = "Wrath of the Lich King", items = {} },
+            { name = "Cataclysm", items = {
+                { 67151, 433440 }, { 52496, 134941 }, { 52494, 134941 }, { 52495, 134941 },
+                { 67541, 134941 }, { 71965, 134941 }, { 69843, 376833 },
+            } },
+            { name = "Pandaria", items = {
+                { 92426, 666474 },
+            } },
+            { name = "Draenor", items = {
+                { 108631, 879998 }, { 108633, 1035038 }, { 108634, 1035047 }, { 119431, 136221 },
+                { 128315, 237560 }, { 128314, 236313 }, { 128671, 1245298 },
+            } },
+            { name = "Legion", items = {} },
+            { name = "Battle for Azeroth", items = {} },
+            { name = "Shadowlands", items = {
+                { 181267, 3386335 }, { 181265, 3860399 }, { 181266, 3860398 }, { 181172, 2027855 },
+                { 180869, 656319 },
+            } },
+            { name = "Dragonflight", items = {
+                { 205463, 1032477 }, { 205419, 133841 },
+            } },
+            { name = "The War Within", items = {} },
+            { name = "Midnight", items = {} },
+        },
+    },
+    {
+        key = "naxx", kind = "list",
+        groups = {
+            { items = {
+                { 207702, 4622301 }, { 22682, 134422 },
+                { 206604, 133124 },  { 206605, 135042 },  { 206606, 132627 },  { 206607, 132614 },
+                { 206608, 132965 },  { 206609, 132524 },  { 206610, 134693 },  { 206611, 132548 },
+            } },
+        },
+    },
+    { key = "icc", kind = "icc" },                           -- custom panel
+    { key = "zg", kind = "list", exchange = true,            -- exchange block on top + farm list below
+      groups = { { items = ZG_FARM } } },
+}
+
+-- Flat list of every tracked item (used for bag scanning / gain tracking)
+local ITEMS = {}
+local MAX_LIST_ROWS = 0
+for _, tab in ipairs(TABS) do
+    if tab.groups then
+        local n = 0
+        for _, g in ipairs(tab.groups) do
+            for _, it in ipairs(g.items) do ITEMS[#ITEMS + 1] = it end
+            n = n + #g.items + (g.name and 1 or 0)
+        end
+        MAX_LIST_ROWS = math.max(MAX_LIST_ROWS, n)
+    end
+end
+
+-------------------------------------------------------------------------------
+-- Icecrown Citadel tab data
+-------------------------------------------------------------------------------
+local ICC_QUESTS = { 24545, 24743, 24547, 24749, 24756, 24757, 24548, 24549, 24748 }  -- 1st .. 9th
+local ICC_FINAL_QUEST = 24748
+local ICC_INSTANCE_ID = 631                         -- Icecrown Citadel (raid instance ID)
+local ICC_CLASSES = { "PALADIN", "WARRIOR", "DEATHKNIGHT" }
+local ICC_CLASS_SET = { PALADIN = true, WARRIOR = true, DEATHKNIGHT = true }
+local ICC_ITEMS = {                                 -- { itemID, iconFileID }
+    { 52200, 237534 }, { 52252, 135026 }, { 52251, 133308 }, { 52201, 135850 }, { 52253, 133876 },
+}
+local SHARD_ITEM, SHARD_ICON, SHARD_NEEDED = 50274, 340336, 50   -- Shadowfrost Shard
+local SHARD_ITEM, SHARD_ICON = 50274, 340336        -- Shadowfrost Shard
 
 -- Battle pets: the list shows the ITEM, but the price is looked up by the pet's speciesID.
 local PET_SPECIES = {
@@ -122,6 +207,17 @@ local L = {
         theme_midnight = "Midnight", theme_graphite = "Graphite", theme_forest = "Forest",
         theme_wine = "Wine", theme_royal = "Royal", theme_amber = "Amber", theme_custom = "Custom",
         adjTip = "Click to adjust today's gained count (±1). Value recalculates from current prices.",
+        tab_general = "General", tab_naxx = "Naxxramas", tab_icc = "Icecrown Citadel", tab_zg = "Zul'Gurub",
+        expAll = "All", noItemsYet = "no items yet",
+        iccInappropriate = "Inappropriate class", iccEligible = "Eligible classes:",
+        iccAllObtained = "All rewards obtained.", iccProgress = "Progress %d/%d",
+        iccItems = "REWARDS", iccTotal = "Total", lkName = "The Lich King", iccShardsFallback = "Shadowfrost Shard",
+        iccPending = "Characters who have not completed quest The Lich King's Last Stand",
+        iccNonePending = "No eligible characters left.",
+        iccMissingPrices = "%d without price", iccPickSource = "Pick a price source to see prices.",
+        colChar = "CHARACTER", colClass = "CLASS", colQuests = "PROGRESS", colShards = "SHARDS", colLK = "LICH KING",
+        zgExchange = "EXCHANGE", zgOwned = "OWNED / NEEDED", zgYieldCol = "YIELD", zgPotential = "Potential yield",
+        tipPrices = "Price lines in item tooltips", on = "On", off = "Off",
     },
     ru = {
         settings = "Настройки", back = "Назад", language = "Язык",
@@ -148,6 +244,17 @@ local L = {
         priceTipSource = "Цена региона доступна только в Oribos Exchange. Источник цен меняется в настройках.",
         theme_midnight = "Полночь", theme_graphite = "Графит", theme_forest = "Лес",
         theme_wine = "Вино", theme_royal = "Королевский", theme_amber = "Янтарь", theme_custom = "Свой",
+        tab_general = "Общее", tab_naxx = "Наксрамас", tab_icc = "Цитадель Ледяной Короны", tab_zg = "Зул'Гуруб",
+        expAll = "Все", noItemsYet = "пока нет предметов",
+        iccInappropriate = "Неподходящий класс", iccEligible = "Подходящие классы:",
+        iccAllObtained = "Все награды получены.", iccProgress = "Прогресс %d/%d",
+        iccItems = "НАГРАДЫ", iccTotal = "Итого", lkName = "Король-лич", iccShardsFallback = "Осколок",
+        iccPending = "Персонажи, не выполнившие задание Последняя битва Короля-лича",
+        iccNonePending = "Подходящих персонажей не осталось.",
+        iccMissingPrices = "без цены: %d", iccPickSource = "Выберите источник цен, чтобы увидеть цены.",
+        colChar = "ПЕРСОНАЖ", colClass = "КЛАСС", colQuests = "ПРОГРЕСС", colShards = "ОСКОЛКИ", colLK = "КОРОЛЬ-ЛИЧ",
+        zgExchange = "ОБМЕН", zgOwned = "ЕСТЬ / НУЖНО", zgYieldCol = "ВЫХОД", zgPotential = "Возможный выход",
+        tipPrices = "Строки цен в подсказках предметов", on = "Вкл", off = "Выкл",
     },
     de = {
         settings = "Einstellungen", back = "Zurück", language = "Sprache",
@@ -174,6 +281,17 @@ local L = {
         priceTipSource = "Der Regionspreis benötigt Oribos Exchange. Preisquelle in den Einstellungen ändern.",
         theme_midnight = "Mitternacht", theme_graphite = "Graphit", theme_forest = "Wald",
         theme_wine = "Wein", theme_royal = "Königsblau", theme_amber = "Bernstein", theme_custom = "Eigene",
+        tab_general = "Allgemein", tab_naxx = "Naxxramas", tab_icc = "Eiskronenzitadelle", tab_zg = "Zul'Gurub",
+        expAll = "Alle", noItemsYet = "noch keine Gegenstände",
+        iccInappropriate = "Ungeeignete Klasse", iccEligible = "Geeignete Klassen:",
+        iccAllObtained = "Alle Belohnungen erhalten.", iccProgress = "Fortschritt %d/%d",
+        iccItems = "BELOHNUNGEN", iccTotal = "Gesamt", lkName = "Der Lichkönig", iccShardsFallback = "Splitter",
+        iccPending = "Charaktere ohne abgeschlossene Quest Das letzte Gefecht des Lichkönigs",
+        iccNonePending = "Keine geeigneten Charaktere übrig.",
+        iccMissingPrices = "%d ohne Preis", iccPickSource = "Wähle eine Preisquelle, um Preise zu sehen.",
+        colChar = "CHARAKTER", colClass = "KLASSE", colQuests = "FORTSCHRITT", colShards = "SPLITTER", colLK = "LICHKÖNIG",
+        zgExchange = "TAUSCH", zgOwned = "BESITZ / BENÖTIGT", zgYieldCol = "ERTRAG", zgPotential = "Möglicher Ertrag",
+        tipPrices = "Preiszeilen in Gegenstands-Tooltips", on = "An", off = "Aus",
     },
 }
 
@@ -212,7 +330,13 @@ local THEMES = {
 
 local GOLD_ICON = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t"
 local PAD, GAP, ROW_H = 10, 8, 30
-local TOP_OFFSET_SCROLL = 164
+local HEADER_H = 24                           -- expansion header rows in the item list
+local AREA_Y = 34                             -- content area starts under the title bar
+local LEFT_W, RIGHT_W, SIDE_GAP = 140, 130, 8 -- left tab column / right expansion column
+local SCOPE_Y, CARD_Y, COLHEAD_Y, SCROLL_Y = 8, 40, 110, 130   -- relative to the content area
+local TOP_OFFSET_SCROLL = AREA_Y + SCROLL_Y   -- distance from the window top to the list
+local ICC_Y = 8
+local ICC_ROW_H = 22
 local BOTTOM_OFFSET_SCROLL = 26
 
 local PERIODS = {
@@ -226,6 +350,7 @@ local PERIODS = {
 -------------------------------------------------------------------------------
 local db, charKey
 local main, Refresh, RequestRefresh, ApplyTheme, ApplyLanguage, RefreshSettings
+local RefreshICC, UpdateICCScroll
 local UI = { buttons = {}, swatches = {}, langButtons = {}, srcButtons = {} }
 local baseline = {}                
 local baselineCaged = {}           
@@ -455,18 +580,23 @@ local function InitDB()
     db = FarmLedgerDB
     db.days = db.days or {}       
     db.held = db.held or {}       
+    db.chars = db.chars or {}     -- per-character class / ICC quest progress / shards / Lich King lockout
     db.settings = db.settings or {}
     local s = db.settings
     if s.allChars == nil then s.allChars = true end
     if s.hideEmpty == nil then s.hideEmpty = false end
     s.period = s.period or "day"
+    s.tab = s.tab or "general"
+    s.expansion = s.expansion or "all"
+    if s.tipPrices == nil then s.tipPrices = true end
     s.priceMode = s.priceMode or "server"      
     s.priceSource = s.priceSource or "oe"      
     s.lang = s.lang or "en"
     s.theme = s.theme or "midnight"
     s.minimapAngle = s.minimapAngle or 215
     s.width = s.width or 460
-    s.height = s.height or 540
+    s.height = s.height or 620
+    if not s.widened then s.widened = true; s.width = math.max(s.width, 800) end   -- room for the side columns
 
     local cutoff = date("%Y-%m-%d", time() - 400 * 86400)
     for k in pairs(db.days) do
@@ -511,6 +641,90 @@ local function AdjustGain(itemID, delta)
 end
 
 -------------------------------------------------------------------------------
+-- Per-character tracking (Icecrown Citadel questline)
+-------------------------------------------------------------------------------
+local function QuestState(id)     -- 2 = completed, 1 = in quest log, 0 = not started
+    if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted and C_QuestLog.IsQuestFlaggedCompleted(id) then return 2 end
+    if C_QuestLog and C_QuestLog.IsOnQuest and C_QuestLog.IsOnQuest(id) then return 1 end
+    return 0
+end
+
+local function OwnedCount(id)          -- bags + bank + reagent bank
+    if C_Item and C_Item.GetItemCount then
+        return C_Item.GetItemCount(id, true, false, true, false) or 0
+    end
+    return GetItemCount(id, true) or 0
+end
+
+local function ShardCount() return OwnedCount(SHARD_ITEM) end
+
+local function UpdateCharData()
+    if not db or not charKey then return end
+    local rec = db.chars[charKey]
+    if not rec then rec = {}; db.chars[charKey] = rec end
+    local _, token = UnitClass("player")
+    rec.class = token
+    rec.female = (UnitSex("player") == 3)
+    rec.name = UnitName("player")
+    rec.realm = GetNormalizedRealmName() or GetRealmName()
+    rec.zg = rec.zg or {}
+    for _, e in ipairs(ZG_EXCHANGE) do rec.zg[e[1]] = OwnedCount(e[1]) end
+    if token and ICC_CLASS_SET[token] then
+        rec.quests = rec.quests or {}
+        for _, id in ipairs(ICC_QUESTS) do
+            -- a completed quest never becomes "not completed" again (guards against flags not loaded yet at login)
+            if rec.quests[id] ~= 2 then rec.quests[id] = QuestState(id) end
+        end
+        rec.shards = ShardCount()
+    end
+end
+
+-- Lich King lockout (only valid after the UPDATE_INSTANCE_INFO event)
+local function UpdateLockout()
+    if not db or not charKey or not GetNumSavedInstances then return end
+    local rec = db.chars[charKey]
+    if not rec or not rec.class or not ICC_CLASS_SET[rec.class] then return end
+    local killed, expires = false, nil
+    for i = 1, GetNumSavedInstances() do
+        local _, _, reset, _, locked, extended, _, isRaid, _, _, numEncounters, _, _, instanceID = GetSavedInstanceInfo(i)
+        if isRaid and instanceID == ICC_INSTANCE_ID and (locked or extended) and numEncounters and numEncounters > 0 then
+            local _, _, isKilled = GetSavedInstanceEncounterInfo(i, numEncounters)   -- The Lich King is the last encounter
+            if isKilled then
+                killed = true
+                expires = time() + (reset or 0)
+            end
+        end
+    end
+    rec.lkKilled, rec.lkExpires, rec.lkChecked = killed, expires, time()
+end
+
+local function LastWeeklyReset()
+    if C_DateAndTime and C_DateAndTime.GetSecondsUntilWeeklyReset then
+        local secs = C_DateAndTime.GetSecondsUntilWeeklyReset()
+        if secs then return time() + secs - 7 * 86400 end
+    end
+    return 0
+end
+
+-- true = killed this week, false = not killed this week, nil = unknown (not checked since the last reset)
+local function LKStatus(rec)
+    if rec.lkKilled and rec.lkExpires and rec.lkExpires > time() then return true end
+    if rec.lkChecked and rec.lkChecked >= LastWeeklyReset() then return false end
+    return nil
+end
+
+local charUpdatePending = false
+local function ScheduleCharUpdate()
+    if charUpdatePending then return end
+    charUpdatePending = true
+    C_Timer.After(1, function()
+        charUpdatePending = false
+        UpdateCharData()
+        if RequestRefresh then RequestRefresh() end
+    end)
+end
+
+-------------------------------------------------------------------------------
 -- Bag scanning
 -------------------------------------------------------------------------------
 local function Scan()
@@ -541,6 +755,7 @@ local function Scan()
         baselineCaged[id] = caged
         held[id] = loose + caged
     end
+    UpdateCharData()
     if changed or main then RequestRefresh() end
 end
 
@@ -694,7 +909,30 @@ end
 -- Main window
 -------------------------------------------------------------------------------
 local cards, rows = {}, {}
-local content, scroll, scrollBar, emptyText, footerText, scopeBtn, hideBtn, priceBtn
+local area, content, scroll, scrollBar, emptyText, footerText, scopeBtn, hideBtn, priceBtn
+
+local function GetActiveTab()
+    local s = db.settings
+    for _, t in ipairs(TABS) do
+        if t.key == s.tab then return t end
+    end
+    return TABS[1]
+end
+
+-- The right column (expansions) only exists on the "General" tab
+local function RightColumnWidth()
+    return GetActiveTab().expansions and (RIGHT_W + SIDE_GAP) or 0
+end
+
+local function AreaWidth()
+    return math.max(1, main:GetWidth() - PAD - LEFT_W - SIDE_GAP - PAD - RightColumnWidth())
+end
+
+local function AnchorArea()
+    area:ClearAllPoints()
+    area:SetPoint("TOPLEFT", main, "TOPLEFT", PAD + LEFT_W + SIDE_GAP, -AREA_Y)
+    area:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -(PAD + RightColumnWidth()), 0)
+end
 
 local function UpdateScrollRange()
     if not scroll then return end
@@ -711,23 +949,26 @@ local function UpdateScrollRange()
 end
 
 local function Layout()
-    if not main then return end
-    local w = main:GetWidth() - 2 * PAD
+    if not main or not area then return end
+    AnchorArea()
+    local w = AreaWidth()
     local cw = (w - 2 * GAP) / 3
     for _, card in ipairs(cards) do card:SetWidth(cw) end
     content:SetWidth(math.max(1, w - 8))
+    if UI.icc then UI.icc.content:SetWidth(math.max(1, w - 8)) end
     UpdateScrollRange()
+    if UpdateICCScroll then UpdateICCScroll() end
 end
 
 local function CreateRow(i)
     local r = CreateFrame("Button", nil, content)
     r:SetHeight(ROW_H)
-    r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(i - 1) * ROW_H)
-    r:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -(i - 1) * ROW_H)
+    r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)      -- re-anchored in Refresh()
+    r:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
 
     r.bg = r:CreateTexture(nil, "BACKGROUND")
     r.bg:SetAllPoints()
-    if i % 2 == 0 then r.bg:SetColorTexture(1, 1, 1, 0.035) else r.bg:SetColorTexture(0, 0, 0, 0) end
+    r.bg:SetColorTexture(0, 0, 0, 0)
 
     r.hl = r:CreateTexture(nil, "HIGHLIGHT")
     r.hl:SetAllPoints()
@@ -793,6 +1034,12 @@ local function CreateRow(i)
     r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
     r.name:SetPoint("RIGHT", r.count, "LEFT", -8, 0)
 
+    -- expansion header text (only used when this row is a group header)
+    r.hdr = MakeText(r, 11, C.accent, "LEFT")
+    r.hdr:SetPoint("LEFT", 8, 0)
+    r.hdr:SetPoint("RIGHT", -8, 0)
+    r.hdr:Hide()
+
     r:SetScript("OnEnter", function(self)
         if not self.itemID then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -800,14 +1047,620 @@ local function CreateRow(i)
         GameTooltip:AddLine(" ")
         GameTooltip:AddDoubleLine(PeriodLabel(db.settings.period) .. " " .. T("gained"), tostring(self.gained or 0), 0.6, 0.6, 0.7, 1, 1, 1)
         GameTooltip:AddDoubleLine(T("value"), FormatGold(self.gainedValue or 0), 0.6, 0.6, 0.7, 1, 1, 1)
-        local m, rg, au = GetLivePrices(self.itemID)
-        GameTooltip:AddDoubleLine(T("serverLine"), m and FormatGold(m) or T("noData"), 0.6, 0.6, 0.7, 1, 1, 1)
-        GameTooltip:AddDoubleLine(T("regionLine"), rg and FormatGold(rg) or T("noData"), 0.6, 0.6, 0.7, 1, 1, 1)
-        GameTooltip:AddDoubleLine(T("aucLine"), au and FormatGold(au) or T("noData"), 0.6, 0.6, 0.7, 1, 1, 1)
+        if db.settings.tipPrices then       -- Settings > "Price lines in item tooltips"
+            local m, rg, au = GetLivePrices(self.itemID)
+            GameTooltip:AddDoubleLine(T("serverLine"), m and FormatGold(m) or T("noData"), 0.6, 0.6, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(T("regionLine"), rg and FormatGold(rg) or T("noData"), 0.6, 0.6, 0.7, 1, 1, 1)
+            GameTooltip:AddDoubleLine(T("aucLine"), au and FormatGold(au) or T("noData"), 0.6, 0.6, 0.7, 1, 1, 1)
+        end
         GameTooltip:Show()
     end)
     r:SetScript("OnLeave", function() GameTooltip:Hide() end)
     return r
+end
+
+-- Zul'Gurub exchange block (sits at the top of the scrolling list) ------------
+local ZG_TITLE_H, ZG_ROW_H, ZG_SUM_H = 24, 26, 40
+local ZG_BLOCK_H = ZG_TITLE_H + #ZG_EXCHANGE * ZG_ROW_H + ZG_SUM_H + 22
+local zg = { rows = {} }
+
+-- Owned amount: this character, or every known character when "All characters" is on
+local function ZGOwnedTotal(id)
+    if not db.settings.allChars then return OwnedCount(id) end
+    local total = 0
+    for ck, rec in pairs(db.chars) do
+        if ck == charKey then total = total + OwnedCount(id)
+        elseif rec.zg then total = total + (rec.zg[id] or 0) end
+    end
+    if not db.chars[charKey] then total = total + OwnedCount(id) end
+    return total
+end
+
+local function ItemTip(self)           -- OnEnter passes (self, motion): no extra args used
+    if not self.itemID then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetItemByID(self.itemID)
+    GameTooltip:Show()
+end
+
+local function BuildZGBlock()
+    local f = CreateFrame("Frame", nil, content)
+    f:SetHeight(ZG_BLOCK_H)
+    f:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    f:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
+    f:Hide()
+    zg.frame = f
+
+    zg.title = MakeText(f, 10, C.accent, "LEFT")
+    zg.title:SetPoint("TOPLEFT", 8, -8)
+    zg.hYield = MakeText(f, 9, C.dim, "RIGHT")
+    zg.hYield:SetPoint("TOPRIGHT", -8, -9)
+    zg.hYield:SetWidth(60)
+    zg.hOwned = MakeText(f, 9, C.dim, "RIGHT")
+    zg.hOwned:SetPoint("RIGHT", zg.hYield, "LEFT", -8, 0)
+    zg.hOwned:SetWidth(110)
+
+    for i, e in ipairs(ZG_EXCHANGE) do
+        local r = CreateFrame("Button", nil, f)
+        r:SetHeight(ZG_ROW_H)
+        local ry = -(ZG_TITLE_H + (i - 1) * ZG_ROW_H)
+        r:SetPoint("TOPLEFT", f, "TOPLEFT", 0, ry)
+        r:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, ry)
+        r.bg = r:CreateTexture(nil, "BACKGROUND")
+        r.bg:SetAllPoints()
+        r.hl = r:CreateTexture(nil, "HIGHLIGHT")
+        r.hl:SetAllPoints()
+        r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetSize(20, 20)
+        r.icon:SetPoint("LEFT", 8, 0)
+        r.icon:SetTexture(e[2])
+        r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        r.yield = MakeText(r, 12, C.text, "RIGHT")
+        r.yield:SetPoint("RIGHT", -8, 0)
+        r.yield:SetWidth(60)
+        r.owned = MakeText(r, 12, C.text, "RIGHT")
+        r.owned:SetPoint("RIGHT", r.yield, "LEFT", -8, 0)
+        r.owned:SetWidth(110)
+        r.name = MakeText(r, 12, C.text, "LEFT")
+        r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
+        r.name:SetPoint("RIGHT", r.owned, "LEFT", -8, 0)
+        r.itemID = e[1]
+        r:SetScript("OnEnter", ItemTip)
+        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        zg.rows[i] = r
+    end
+
+    local sumY = -(ZG_TITLE_H + #ZG_EXCHANGE * ZG_ROW_H + 8)
+    local sum = CreateFrame("Button", nil, f)
+    sum:SetHeight(ZG_SUM_H)
+    sum:SetPoint("TOPLEFT", f, "TOPLEFT", 0, sumY)
+    sum:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, sumY)
+    sum.bg = sum:CreateTexture(nil, "BACKGROUND")
+    sum.bg:SetAllPoints()
+    sum.icon = sum:CreateTexture(nil, "ARTWORK")
+    sum.icon:SetSize(30, 30)
+    sum.icon:SetPoint("LEFT", 8, 0)
+    sum.icon:SetTexture(ZG_REWARD[2])
+    sum.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    sum.value = MakeText(sum, 20, C.good, "RIGHT")
+    sum.value:SetPoint("RIGHT", -10, 0)
+    sum.value:SetWidth(90)
+    sum.name = MakeText(sum, 12, C.text, "LEFT")
+    sum.name:SetPoint("LEFT", sum.icon, "RIGHT", 8, 7)
+    sum.name:SetPoint("RIGHT", sum.value, "LEFT", -8, 0)
+    sum.sub = MakeText(sum, 10, C.dim, "LEFT")
+    sum.sub:SetPoint("LEFT", sum.icon, "RIGHT", 8, -8)
+    sum.itemID = ZG_REWARD[1]
+    sum:SetScript("OnEnter", ItemTip)
+    sum:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    zg.sum = sum
+
+    zg.line = f:CreateTexture(nil, "ARTWORK")
+    zg.line:SetHeight(1)
+    zg.line:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -(ZG_BLOCK_H - 8))
+    zg.line:SetPoint("TOPRIGHT", f, "TOPRIGHT", -8, -(ZG_BLOCK_H - 8))
+    zg.line:SetColorTexture(1, 1, 1, 0.12)
+end
+
+-- Returns true while item data is still loading
+local function RefreshZGBlock()
+    local missing = false
+    zg.title:SetText(T("zgExchange"))
+    zg.title:SetTextColor(unpack(C.accent))
+    zg.hOwned:SetText(T("zgOwned"))
+    zg.hYield:SetText(T("zgYieldCol"))
+
+    local total = 0
+    for i, e in ipairs(ZG_EXCHANGE) do
+        local r = zg.rows[i]
+        local have = ZGOwnedTotal(e[1])
+        local per = math.floor(have / e[3])
+        total = total + per
+
+        local name, quality = GetItemNameQuality(e[1])
+        if name then
+            r.name:SetText(name)
+            local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+            if qc then r.name:SetTextColor(qc.r, qc.g, qc.b) else r.name:SetTextColor(unpack(C.text)) end
+        else
+            missing = true
+            r.name:SetText("Item " .. e[1])
+            r.name:SetTextColor(unpack(C.dim))
+            if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(e[1]) end
+        end
+        r.owned:SetText(string.format("%d / %d", have, e[3]))
+        r.owned:SetTextColor(unpack(per > 0 and C.text or C.dim))
+        r.yield:SetText("= " .. per)
+        r.yield:SetTextColor(unpack(per > 0 and C.good or C.dim))
+        r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+        if i % 2 == 0 then r.bg:SetColorTexture(1, 1, 1, 0.035) else r.bg:SetColorTexture(0, 0, 0, 0) end
+    end
+
+    local name, quality = GetItemNameQuality(ZG_REWARD[1])
+    if name then
+        zg.sum.name:SetText(name)
+        local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+        if qc then zg.sum.name:SetTextColor(qc.r, qc.g, qc.b) else zg.sum.name:SetTextColor(unpack(C.text)) end
+    else
+        missing = true
+        zg.sum.name:SetText("Item " .. ZG_REWARD[1])
+        zg.sum.name:SetTextColor(unpack(C.dim))
+        if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(ZG_REWARD[1]) end
+    end
+    zg.sum.sub:SetText(T("zgPotential"))
+    zg.sum.value:SetText(tostring(total))
+    zg.sum.value:SetTextColor(unpack(total > 0 and C.good or C.dim))
+    zg.sum.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+    return missing
+end
+
+-- Icecrown Citadel tab -------------------------------------------------------
+local function ClassRGB(token)
+    local c = RAID_CLASS_COLORS and RAID_CLASS_COLORS[token]
+    if c then return { c.r, c.g, c.b } end
+    return C.text
+end
+
+local function ClassName(token, female)
+    local tbl = (female and LOCALIZED_CLASS_NAMES_FEMALE) or LOCALIZED_CLASS_NAMES_MALE
+    return (tbl and tbl[token]) or token or "?"
+end
+
+local function CharLabel(rec, ck)
+    local name = rec.name or (ck and ck:match("^(.-)%-")) or "?"
+    local home = GetNormalizedRealmName and GetNormalizedRealmName() or nil
+    if rec.realm and home and rec.realm ~= home then return name .. "-" .. rec.realm end
+    return name
+end
+
+local function ICCProgress(rec)
+    local n = 0
+    if rec.quests then
+        for _, id in ipairs(ICC_QUESTS) do
+            if rec.quests[id] == 2 then n = n + 1 end
+        end
+    end
+    return n
+end
+
+local function ICCDone(rec)
+    return rec.quests ~= nil and rec.quests[ICC_FINAL_QUEST] == 2
+end
+
+-- Price of one item from the selected source (Oribos Exchange server/region, or Auctionator)
+local function ICCUnitPrice(itemID)
+    local s = db.settings
+    if s.priceSource == "auctionator" then
+        return GetAuctionatorPrice(itemID)
+    elseif s.priceSource == "oe" then
+        local m, r = GetPrices(itemID)
+        if s.priceMode == "region" then return r end
+        return m
+    end
+    return nil
+end
+
+local function FitButton(b, minW)
+    b:SetWidth(math.max(minW or 60, b.text:GetStringWidth() + 20))
+end
+
+-- One line of the character table (or its header): name | class | progress | shards | Lich King
+local function BuildCharRow(parent, header)
+    local r = CreateFrame("Button", nil, parent)
+    r:SetHeight(header and 18 or 24)
+    local size = header and 9 or 12
+    local col = header and C.dim or C.text
+    if header then
+        r:EnableMouse(false)
+    else
+        r.bg = r:CreateTexture(nil, "BACKGROUND")
+        r.bg:SetAllPoints()
+        r.bg:SetColorTexture(0, 0, 0, 0)
+        r.hl = r:CreateTexture(nil, "HIGHLIGHT")
+        r.hl:SetAllPoints()
+        r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+    end
+
+    r.lk = MakeText(r, size, col, "RIGHT")
+    r.lk:SetPoint("RIGHT", -6, 0)
+    r.lk:SetWidth(100)
+
+    r.shText = MakeText(r, size, col, "RIGHT")
+    r.shText:SetPoint("RIGHT", r.lk, "LEFT", -8, 0)
+    r.shText:SetWidth(header and 58 or 42)
+    local anchor = r.shText
+    if not header then
+        r.shIcon = r:CreateTexture(nil, "ARTWORK")
+        r.shIcon:SetSize(14, 14)
+        r.shIcon:SetTexture(SHARD_ICON)
+        r.shIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        r.shIcon:SetPoint("RIGHT", r.shText, "LEFT", -2, 0)
+        anchor = r.shIcon
+    end
+
+    r.prog = MakeText(r, size, col, "RIGHT")
+    r.prog:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
+    r.prog:SetWidth(header and 70 or 44)
+
+    r.class = MakeText(r, size, col, "LEFT")
+    r.class:SetPoint("RIGHT", r.prog, "LEFT", -8, 0)
+    r.class:SetWidth(96)
+
+    r.name = MakeText(r, size, col, "LEFT")
+    r.name:SetPoint("LEFT", 6, 0)
+    r.name:SetPoint("RIGHT", r.class, "LEFT", -8, 0)
+    return r
+end
+
+local function BuildICCPanel()
+    local W = { it = {}, cls = {}, pend = {} }
+    UI.icc = W
+
+    local f = CreateFrame("Frame", nil, main)
+    f:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -ICC_Y)
+    f:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, BOTTOM_OFFSET_SCROLL)
+    f:Hide()
+    W.frame = f
+
+    local sf = CreateFrame("ScrollFrame", nil, f)
+    sf:SetAllPoints()
+    sf:EnableMouseWheel(true)
+    local c = CreateFrame("Frame", nil, sf)
+    c:SetSize(400, 1)
+    sf:SetScrollChild(c)
+    W.scroll, W.content = sf, c
+
+    local bar = CreateFrame("Slider", nil, main)
+    bar:SetOrientation("VERTICAL")
+    bar:SetPoint("TOPRIGHT", area, "TOPRIGHT", 0, -ICC_Y)
+    bar:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", 0, BOTTOM_OFFSET_SCROLL)
+    bar:SetWidth(5)
+    local track = bar:CreateTexture(nil, "BACKGROUND")
+    track:SetAllPoints()
+    track:SetColorTexture(1, 1, 1, 0.05)
+    W.thumb = bar:CreateTexture(nil, "OVERLAY")
+    W.thumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.8)
+    W.thumb:SetSize(5, 40)
+    bar:SetThumbTexture(W.thumb)
+    bar:SetMinMaxValues(0, 0)
+    bar:SetValueStep(1)
+    bar:SetValue(0)
+    bar:SetScript("OnValueChanged", function(_, v) sf:SetVerticalScroll(v) end)
+    bar:Hide()
+    sf:SetScript("OnMouseWheel", function(_, delta)
+        bar:SetValue(bar:GetValue() - delta * ROW_H * 2)
+    end)
+    W.bar = bar
+
+    local function fs(size, color, justify) return MakeText(c, size, color, justify) end
+
+    -- rewards + prices (very top)
+    W.iTitle = fs(10, C.accent, "LEFT")
+    W.srcOE = MakeButton(c, "", 110, 20)
+    W.srcAuc = MakeButton(c, "", 90, 20)
+    W.modeBtn = MakeButton(c, "", 90, 20)
+    W.srcOE:SetScript("OnClick", function() db.settings.priceSource = "oe"; Refresh() end)
+    W.srcAuc:SetScript("OnClick", function() db.settings.priceSource = "auctionator"; Refresh() end)
+    W.modeBtn:SetScript("OnClick", function()
+        local s = db.settings
+        s.priceMode = (s.priceMode == "region") and "server" or "region"
+        Refresh()
+    end)
+    for i = 1, #ICC_ITEMS do
+        local r = CreateFrame("Button", nil, c)
+        r:SetHeight(28)
+        r.bg = r:CreateTexture(nil, "BACKGROUND")
+        r.bg:SetAllPoints()
+        r.hl = r:CreateTexture(nil, "HIGHLIGHT")
+        r.hl:SetAllPoints()
+        r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+        r.icon = r:CreateTexture(nil, "ARTWORK")
+        r.icon:SetSize(22, 22)
+        r.icon:SetPoint("LEFT", 6, 0)
+        r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        r.price = MakeText(r, 12, C.text, "RIGHT")
+        r.price:SetPoint("RIGHT", -8, 0)
+        r.price:SetWidth(120)
+        r.name = MakeText(r, 12, C.text, "LEFT")
+        r.name:SetPoint("LEFT", r.icon, "RIGHT", 8, 0)
+        r.name:SetPoint("RIGHT", r.price, "LEFT", -8, 0)
+        r:SetScript("OnEnter", ItemTip)
+        r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        r:Hide()
+        W.it[i] = r
+    end
+    W.totalLine = c:CreateTexture(nil, "ARTWORK")
+    W.totalLine:SetHeight(1)
+    W.totalLine:SetColorTexture(1, 1, 1, 0.15)
+    W.totalLabel = fs(12, C.text, "LEFT")
+    W.totalValue = fs(14, C.good, "RIGHT")
+    W.totalNote = fs(10, C.dim, "RIGHT")
+
+    -- current character
+    W.meName = fs(13, C.text, "LEFT")
+    W.meLine = fs(12, C.text, "LEFT")
+    W.msg = fs(16, C.bad, "CENTER")
+    W.msg2 = fs(11, C.dim, "CENTER")
+    for i = 1, #ICC_CLASSES do W.cls[i] = fs(13, C.text, "CENTER") end
+
+    -- all characters that still need quest 24748
+    W.pTitle = fs(10, C.accent, "LEFT")
+    W.pNone = fs(11, C.dim, "LEFT")
+    W.pHead = BuildCharRow(c, true)
+    W.pHead:Hide()
+end
+
+UpdateICCScroll = function()
+    local W = UI.icc
+    if not W or not main then return end
+    local shown = W.frame:IsShown()
+    local viewH = math.max(1, main:GetHeight() - AREA_Y - ICC_Y - BOTTOM_OFFSET_SCROLL)
+    local maxScroll = math.max(0, W.content:GetHeight() - viewH)
+    W.bar:SetMinMaxValues(0, maxScroll)
+    if not shown then
+        W.bar:Hide()
+    elseif maxScroll <= 0 then
+        W.bar:Hide()
+        W.scroll:SetVerticalScroll(0)
+    else
+        W.bar:Show()
+        if W.bar:GetValue() > maxScroll then W.bar:SetValue(maxScroll) end
+    end
+end
+
+-- Returns true while some item data is still loading (so Refresh can retry)
+RefreshICC = function()
+    local W = UI.icc
+    if not W or not db then return false end
+    UpdateCharData()
+    local s = db.settings
+    local c = W.content
+    local rec = db.chars[charKey] or {}
+    local eligible = rec.class ~= nil and ICC_CLASS_SET[rec.class] == true
+    local done = eligible and ICCDone(rec)
+    local missing = false
+
+    local function place(w, y, l, r)
+        w:ClearAllPoints()
+        w:SetPoint("TOPLEFT", c, "TOPLEFT", l or 0, -y)
+        w:SetPoint("TOPRIGHT", c, "TOPRIGHT", r or 0, -y)
+    end
+
+    for _, w in ipairs({ W.msg, W.msg2, W.meName, W.meLine, W.iTitle, W.srcOE, W.srcAuc, W.modeBtn,
+                         W.totalLine, W.totalLabel, W.totalValue, W.totalNote, W.pTitle, W.pNone, W.pHead }) do
+        w:Hide()
+    end
+    for _, w in ipairs(W.cls) do w:Hide() end
+    for _, w in ipairs(W.it) do w:Hide() end
+    for _, w in ipairs(W.pend) do w:Hide() end
+
+    local y = 0
+
+    -- 1. Rewards + prices, very top --------------------------------------------
+    W.iTitle:SetText(T("iccItems"))
+    W.iTitle:SetTextColor(unpack(C.accent))
+    place(W.iTitle, y + 3); W.iTitle:Show()
+
+    W.srcOE.text:SetText(T("srcOE")); FitButton(W.srcOE, 70)
+    W.srcAuc.text:SetText(T("srcAuc")); FitButton(W.srcAuc, 70)
+    SetActive(W.srcOE, s.priceSource == "oe")
+    SetActive(W.srcAuc, s.priceSource == "auctionator")
+    W.srcAuc:ClearAllPoints()
+    W.srcAuc:SetPoint("TOPRIGHT", c, "TOPRIGHT", 0, -y)
+    W.srcOE:ClearAllPoints()
+    W.srcOE:SetPoint("RIGHT", W.srcAuc, "LEFT", -6, 0)
+    W.srcOE:Show(); W.srcAuc:Show()
+    if s.priceSource == "oe" then
+        W.modeBtn.text:SetText(s.priceMode == "region" and T("regionPrice") or T("serverPrice"))
+        FitButton(W.modeBtn, 70)
+        SetActive(W.modeBtn, true)
+        W.modeBtn:ClearAllPoints()
+        W.modeBtn:SetPoint("RIGHT", W.srcOE, "LEFT", -6, 0)
+        W.modeBtn:Show()
+    end
+    y = y + 28
+
+    local total, noPrice = 0, 0
+    for i, it in ipairs(ICC_ITEMS) do
+        local r = W.it[i]
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", c, "TOPLEFT", 0, -y)
+        r:SetPoint("TOPRIGHT", c, "TOPRIGHT", 0, -y)
+        r.itemID = it[1]
+        r.icon:SetTexture(it[2])
+        local name, quality = GetItemNameQuality(it[1])
+        if name then
+            r.name:SetText(name)
+            local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+            if qc then r.name:SetTextColor(qc.r, qc.g, qc.b) else r.name:SetTextColor(unpack(C.text)) end
+        else
+            missing = true
+            r.name:SetText("Item " .. it[1])
+            r.name:SetTextColor(unpack(C.dim))
+            if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(it[1]) end
+        end
+        if s.priceSource == "none" then
+            r.price:SetText("-"); r.price:SetTextColor(unpack(C.dim))
+        else
+            local price = ICCUnitPrice(it[1])
+            if price and price > 0 then
+                total = total + price
+                r.price:SetText(FormatGold(price)); r.price:SetTextColor(unpack(C.good))
+            else
+                noPrice = noPrice + 1
+                r.price:SetText(T("noPrice")); r.price:SetTextColor(unpack(C.bad))
+            end
+        end
+        r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+        if i % 2 == 0 then r.bg:SetColorTexture(1, 1, 1, 0.035) else r.bg:SetColorTexture(0, 0, 0, 0) end
+        r:Show()
+        y = y + 28
+    end
+
+    W.totalLine:ClearAllPoints()
+    W.totalLine:SetPoint("TOPLEFT", c, "TOPLEFT", 0, -(y + 2))
+    W.totalLine:SetPoint("TOPRIGHT", c, "TOPRIGHT", 0, -(y + 2))
+    W.totalLine:Show()
+    W.totalLabel:SetText(T("iccTotal"))
+    W.totalLabel:SetTextColor(unpack(C.text))
+    place(W.totalLabel, y + 9, 8)
+    W.totalLabel:Show()
+    if s.priceSource == "none" then
+        W.totalValue:SetText("-"); W.totalValue:SetTextColor(unpack(C.dim))
+    else
+        W.totalValue:SetText(FormatGold(total)); W.totalValue:SetTextColor(unpack(C.good))
+    end
+    place(W.totalValue, y + 8, 0, -8)
+    W.totalValue:Show()
+    y = y + 32
+    if s.priceSource == "none" then
+        W.totalNote:SetText(T("iccPickSource"))
+        place(W.totalNote, y, 0, -8); W.totalNote:Show()
+        y = y + 16
+    elseif noPrice > 0 then
+        W.totalNote:SetText(string.format(T("iccMissingPrices"), noPrice))
+        place(W.totalNote, y, 0, -8); W.totalNote:Show()
+        y = y + 16
+    end
+    y = y + 18
+
+    -- 2. Current character -------------------------------------------------------
+    W.meName:SetText(CharLabel(rec, charKey))
+    W.meName:SetTextColor(unpack(ClassRGB(rec.class)))
+    place(W.meName, y, 4); W.meName:Show()
+    y = y + 22
+
+    if not eligible then
+        -- Not a Paladin / Warrior / Death Knight
+        y = y + 6
+        W.msg:SetText(T("iccInappropriate"))
+        W.msg:SetTextColor(unpack(C.bad))
+        place(W.msg, y); W.msg:Show()
+        y = y + 30
+        W.msg2:SetText(T("iccEligible"))
+        W.msg2:SetTextColor(unpack(C.dim))
+        place(W.msg2, y); W.msg2:Show()
+        y = y + 24
+        for i, token in ipairs(ICC_CLASSES) do
+            local line = W.cls[i]
+            line:SetText(ClassName(token))
+            line:SetTextColor(unpack(ClassRGB(token)))
+            place(line, y)
+            line:Show()
+            y = y + 20
+        end
+        y = y + 8
+
+    elseif done then
+        -- Quest 24748 already completed
+        W.msg:SetText(T("iccAllObtained"))
+        W.msg:SetTextColor(unpack(C.good))
+        place(W.msg, y + 2); W.msg:Show()
+        y = y + 34
+
+    else
+        -- "Progress 3/9.  [icon] Shadowfrost Shard 14/50.  The Lich King"
+        local shardName = GetItemNameQuality(SHARD_ITEM)
+        if not shardName then
+            missing = true
+            shardName = T("iccShardsFallback")
+            if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(SHARD_ITEM) end
+        end
+        local lkCol = Hex(LKStatus(rec) == true and C.good or C.dim)
+        W.meLine:SetText(string.format("%s.   |T%d:14:14|t %s %d/%d.   %s%s|r",
+            string.format(T("iccProgress"), ICCProgress(rec), #ICC_QUESTS),
+            SHARD_ICON, shardName, rec.shards or 0, SHARD_NEEDED, lkCol, T("lkName")))
+        W.meLine:SetTextColor(unpack(C.text))
+        place(W.meLine, y, 4); W.meLine:Show()
+        y = y + 28
+    end
+    y = y + 10
+
+    -- 3. All characters that have not completed quest 24748 ----------------------
+    W.pTitle:SetText(T("iccPending"))
+    W.pTitle:SetTextColor(unpack(C.accent))
+    place(W.pTitle, y); W.pTitle:Show()
+    y = y + 18
+
+    local pend = {}
+    for ck, r2 in pairs(db.chars) do
+        if r2.class and ICC_CLASS_SET[r2.class] and not ICCDone(r2) then pend[#pend + 1] = ck end
+    end
+    if #pend == 0 then
+        W.pNone:SetText(T("iccNonePending"))
+        place(W.pNone, y + 2, 4); W.pNone:Show()
+        y = y + 26
+    else
+        table.sort(pend, function(a, b)
+            local pa, pb = ICCProgress(db.chars[a]), ICCProgress(db.chars[b])
+            if pa ~= pb then return pa > pb end
+            return (db.chars[a].name or a) < (db.chars[b].name or b)
+        end)
+
+        local h = W.pHead
+        h.name:SetText(T("colChar")); h.class:SetText(T("colClass")); h.prog:SetText(T("colQuests"))
+        h.shText:SetText(T("colShards")); h.lk:SetText(T("colLK"))
+        for _, fsx in ipairs({ h.name, h.class, h.prog, h.shText, h.lk }) do fsx:SetTextColor(unpack(C.dim)) end
+        place(h, y)
+        h:Show()
+        y = y + 20
+
+        for i, ck in ipairs(pend) do
+            local r = W.pend[i]
+            if not r then
+                r = BuildCharRow(c, false)
+                W.pend[i] = r
+            end
+            local r2 = db.chars[ck]
+            place(r, y)
+            local col = ClassRGB(r2.class)
+            r.name:SetText(CharLabel(r2, ck))
+            r.name:SetTextColor(unpack(col))
+            r.class:SetText(ClassName(r2.class, r2.female))
+            r.class:SetTextColor(unpack(col))
+            r.prog:SetText(string.format("%d/%d", ICCProgress(r2), #ICC_QUESTS))
+            r.prog:SetTextColor(unpack(C.text))
+            r.shText:SetText(string.format("%d/%d", r2.shards or 0, SHARD_NEEDED))
+            r.shText:SetTextColor(unpack(C.text))
+            r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+            r.lk:SetText(T("lkName"))
+            r.lk:SetTextColor(unpack(LKStatus(r2) == true and C.good or C.dim))
+            if ck == charKey then
+                r.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.12)
+            elseif i % 2 == 0 then
+                r.bg:SetColorTexture(1, 1, 1, 0.035)
+            else
+                r.bg:SetColorTexture(0, 0, 0, 0)
+            end
+            r:Show()
+            y = y + 24
+        end
+    end
+
+    c:SetHeight(math.max(1, y + 8))
+    UpdateICCScroll()
+    return missing
 end
 
 -- Settings panel -------------------------------------------------------------
@@ -918,6 +1771,15 @@ local function BuildSettingsPanel()
     UI.customBtn:SetPoint("TOPLEFT", PAD + 4, -250)
     UI.customBtn:SetScript("OnClick", OpenColorPicker)
 
+    -- Oribos Exchange / Auctionator already add their own lines to item tooltips,
+    -- so the extra price lines this addon appends can be switched off.
+    UI.tipBtn = MakeButton(p, "", 340, 28)
+    UI.tipBtn:SetPoint("TOPLEFT", PAD + 4, -296)
+    UI.tipBtn:SetScript("OnClick", function()
+        s.tipPrices = not s.tipPrices
+        RefreshSettings()
+    end)
+
     UI.backBtn = MakeButton(p, "", 110, 26)
     UI.backBtn:SetPoint("BOTTOMLEFT", PAD + 4, 16)
     UI.backBtn:SetScript("OnClick", function() p:Hide() end)
@@ -948,6 +1810,8 @@ function RefreshSettings()
         sw:SetBackdropBorderColor(unpack(s.theme == key and WHITE_C or C.border))
     end
     SetActive(UI.customBtn, s.theme == "custom")
+    UI.tipBtn.text:SetText(T("tipPrices") .. ": " .. (s.tipPrices and T("on") or T("off")))
+    SetActive(UI.tipBtn, s.tipPrices)
 end
 
 -- Window ---------------------------------------------------------------------
@@ -960,7 +1824,7 @@ local function BuildMainFrame()
     main:SetClampedToScreen(true)
     main:SetMovable(true)
     main:SetResizable(true)
-    main:SetResizeBounds(400, 360, 1000, 1000)
+    main:SetResizeBounds(680, 460, 1400, 1000)
     ApplyBackdrop(main, C.bg, C.border)
     if s.point then
         main:SetPoint(s.point[1], UIParent, s.point[2], s.point[3], s.point[4])
@@ -1000,8 +1864,52 @@ local function BuildMainFrame()
     UI.settingsBtn = MakeButton(header, "", 100, 20)
     UI.settingsBtn:SetPoint("RIGHT", close, "LEFT", -6, 0)
 
+    -- Content area (between the left tab column and the optional right column)
+    area = CreateFrame("Frame", nil, main)
+    area:SetPoint("TOPLEFT", main, "TOPLEFT", PAD + LEFT_W + SIDE_GAP, -AREA_Y)
+    area:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -PAD, 0)
+
+    -- Left column: tabs as toggle buttons
+    UI.tabButtons = {}
+    for i, t in ipairs(TABS) do
+        local b = MakeButton(main, "", LEFT_W, 30)
+        b:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -(AREA_Y + 8 + (i - 1) * 36))
+        b.text:SetWidth(LEFT_W - 12)
+        b.text:SetWordWrap(true)
+        b.tab = t
+        b:SetScript("OnClick", function(self)
+            s.tab = self.tab.key
+            Refresh()
+        end)
+        UI.tabButtons[i] = b
+    end
+
+    -- Right column: expansions (only visible on the "General" tab)
+    UI.expBar = CreateFrame("Frame", nil, main)
+    UI.expBar:SetPoint("TOPRIGHT", main, "TOPRIGHT", -PAD, -(AREA_Y + 8))
+    UI.expBar:SetSize(RIGHT_W, 10)
+    UI.expButtons = {}
+    local expList = { { key = "all" } }
+    for _, t in ipairs(TABS) do
+        if t.expansions then
+            for _, g in ipairs(t.groups) do expList[#expList + 1] = { key = g.name, group = g } end
+        end
+    end
+    for i, e in ipairs(expList) do
+        local b = MakeButton(UI.expBar, "", RIGHT_W, 26)
+        b:SetPoint("TOPLEFT", UI.expBar, "TOPLEFT", 0, -((i - 1) * 30))
+        b.text:SetWidth(RIGHT_W - 12)
+        b.text:SetWordWrap(true)
+        b.key, b.group = e.key, e.group
+        b:SetScript("OnClick", function(self)
+            s.expansion = self.key
+            Refresh()
+        end)
+        UI.expButtons[i] = b
+    end
+
     scopeBtn = MakeButton(main, "", 130, 24)
-    scopeBtn:SetPoint("TOPLEFT", PAD, -(34 + 8))
+    scopeBtn:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -SCOPE_Y)
     scopeBtn:SetScript("OnClick", function()
         s.allChars = not s.allChars
         Refresh()
@@ -1041,7 +1949,7 @@ local function BuildMainFrame()
         card:SetHeight(62)
         ApplyBackdrop(card, C.panel, C.border)
         if i == 1 then
-            card:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -74)
+            card:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -CARD_Y)
         else
             card:SetPoint("TOPLEFT", cards[i - 1], "TOPRIGHT", GAP, 0)
         end
@@ -1073,9 +1981,10 @@ local function BuildMainFrame()
     end
 
     local colHeader = CreateFrame("Frame", nil, main)
-    colHeader:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -144)
-    colHeader:SetPoint("TOPRIGHT", main, "TOPRIGHT", -PAD - 8, -144)
+    colHeader:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -COLHEAD_Y)
+    colHeader:SetPoint("TOPRIGHT", area, "TOPRIGHT", -8, -COLHEAD_Y)
     colHeader:SetHeight(18)
+    UI.colHeader = colHeader
     UI.hVal = MakeText(colHeader, 9, C.dim, "RIGHT")
     UI.hVal:SetPoint("RIGHT", -8, 0); UI.hVal:SetWidth(100)
     UI.hCnt = MakeText(colHeader, 9, C.dim, "RIGHT")
@@ -1084,8 +1993,8 @@ local function BuildMainFrame()
     UI.hName:SetPoint("LEFT", 36, 0)
 
     scroll = CreateFrame("ScrollFrame", nil, main)
-    scroll:SetPoint("TOPLEFT", main, "TOPLEFT", PAD, -TOP_OFFSET_SCROLL)
-    scroll:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -PAD - 8, BOTTOM_OFFSET_SCROLL)
+    scroll:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -SCROLL_Y)
+    scroll:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, BOTTOM_OFFSET_SCROLL)
     scroll:EnableMouseWheel(true)
 
     content = CreateFrame("Frame", nil, scroll)
@@ -1094,8 +2003,8 @@ local function BuildMainFrame()
 
     scrollBar = CreateFrame("Slider", nil, main)
     scrollBar:SetOrientation("VERTICAL")
-    scrollBar:SetPoint("TOPRIGHT", main, "TOPRIGHT", -PAD, -TOP_OFFSET_SCROLL)
-    scrollBar:SetPoint("BOTTOMRIGHT", main, "BOTTOMRIGHT", -PAD, BOTTOM_OFFSET_SCROLL)
+    scrollBar:SetPoint("TOPRIGHT", area, "TOPRIGHT", 0, -SCROLL_Y)
+    scrollBar:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", 0, BOTTOM_OFFSET_SCROLL)
     scrollBar:SetWidth(5)
     local track = scrollBar:CreateTexture(nil, "BACKGROUND")
     track:SetAllPoints(); track:SetColorTexture(1, 1, 1, 0.05)
@@ -1115,10 +2024,11 @@ local function BuildMainFrame()
     emptyText:SetPoint("TOP", scroll, "TOP", 0, -30)
     emptyText:Hide()
 
-    for i = 1, #ITEMS do rows[i] = CreateRow(i) end
+    for i = 1, MAX_LIST_ROWS do rows[i] = CreateRow(i) end
+    BuildZGBlock()
 
     footerText = MakeText(main, 10, C.dim, "LEFT")
-    footerText:SetPoint("BOTTOMLEFT", PAD, 8)
+    footerText:SetPoint("BOTTOMLEFT", PAD + LEFT_W + SIDE_GAP, 8)
     footerText:SetPoint("BOTTOMRIGHT", -26, 8)
 
     local grip = CreateFrame("Button", nil, main)
@@ -1131,6 +2041,7 @@ local function BuildMainFrame()
     grip:SetScript("OnMouseDown", function() main:StartSizing("BOTTOMRIGHT") end)
     grip:SetScript("OnMouseUp", function() main:StopMovingOrSizing(); SaveGeometry(); Layout() end)
 
+    BuildICCPanel()
     BuildSettingsPanel()
     UI.settingsBtn:SetScript("OnClick", function()
         local p = UI.settingsPanel
@@ -1172,6 +2083,7 @@ function ApplyTheme()
     UI.accentBar:SetColorTexture(unpack(C.accent))
     UI.title:SetText(Hex(C.accent) .. "Farm|r Ledger")
     UI.thumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.8)
+    if UI.icc then UI.icc.thumb:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.8) end
     for _, b in ipairs(UI.buttons) do
         b:SetBackdropColor(unpack(C.panel))
         b:SetBackdropBorderColor(unpack(b.active and C.accent or C.border))
@@ -1180,7 +2092,10 @@ function ApplyTheme()
         card:SetBackdropColor(unpack(C.panel))
         card.bar:SetColorTexture(unpack(C.accent))
     end
-    for _, r in ipairs(rows) do r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10) end
+    for _, r in ipairs(rows) do
+        r.hl:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.10)
+        r.hdr:SetTextColor(unpack(C.accent))
+    end
     RefreshSettings()   
     Refresh()           
 end
@@ -1188,9 +2103,72 @@ end
 -------------------------------------------------------------------------------
 -- Refresh
 -------------------------------------------------------------------------------
+local function UpdateTabs()
+    local tab = GetActiveTab()
+    for _, b in ipairs(UI.tabButtons) do
+        b.text:SetText(T("tab_" .. b.tab.key))
+        SetActive(b, b.tab == tab)
+    end
+    UI.expBar:SetShown(tab.expansions == true)
+    if tab.expansions then
+        local sel = db.settings.expansion
+        for _, b in ipairs(UI.expButtons) do
+            b.text:SetText(b.group and b.group.name or T("expAll"))
+            SetActive(b, b.key == sel)
+            b:SetAlpha((b.group and #b.group.items == 0) and 0.55 or 1)   -- empty placeholder groups look dimmer
+        end
+    end
+end
+
+-- Switch between the item-list widgets and the Icecrown Citadel panel
+local function SetMode(mode)
+    local icc = (mode == "icc")
+    for _, card in ipairs(cards) do card:SetShown(not icc) end
+    scopeBtn:SetShown(not icc)
+    hideBtn:SetShown(not icc)
+    priceBtn:SetShown(not icc)
+    UI.colHeader:SetShown(not icc)
+    scroll:SetShown(not icc)
+    if icc then scrollBar:Hide() end
+    if UI.icc then
+        UI.icc.frame:SetShown(icc)
+        if not icc then UI.icc.bar:Hide() end
+    end
+end
+
 function Refresh()
     if not main or not db then return end
     local s = db.settings
+    local tab = GetActiveTab()
+    UpdateTabs()
+    Layout()                    -- the right column appears / disappears with the tab
+
+    local green, red = "|cff73d97f", "|cfff26666"
+    local function UpdateFooter(label)
+        if s.priceSource == "oe" then
+            footerText:SetText(string.format("%s  |  %s: %s", label, PriceModeText(),
+                OEAvailable() and (green .. "Oribos Exchange|r") or (red .. T("noOE") .. "|r")))
+        elseif s.priceSource == "auctionator" then
+            footerText:SetText(string.format("%s  |  %s: %s", label, T("srcLabel"),
+                AuctionatorAvailable() and (green .. "Auctionator|r") or (red .. T("noAuc") .. "|r")))
+        else
+            footerText:SetText(string.format("%s  |  %s", label, T("priceOff")))
+        end
+    end
+
+    -- Icecrown Citadel: custom panel -------------------------------------------
+    if tab.kind == "icc" then
+        SetMode("icc")
+        local missing = RefreshICC()
+        UpdateFooter(T("tab_icc"))
+        if missing then
+            C_Timer.After(1, function() if main:IsShown() then Refresh() end end)
+        end
+        return
+    end
+
+    -- Item list ----------------------------------------------------------------
+    SetMode("list")
     cagedCounts = ScanCagedPets()
     local agg, tot = ComputeTotals()
 
@@ -1216,67 +2194,118 @@ function Refresh()
         card:SetBackdropBorderColor(unpack(sel and C.accent or C.border))
     end
 
-    local period = s.period
-    local list = {}
-    for idx, it in ipairs(ITEMS) do
-        local e = agg[period][it[1]]
-        local n = e and e.n or 0
-        if n > 0 or not s.hideEmpty then
-            list[#list + 1] = { idx = idx, id = it[1], icon = it[2], n = n, v = e and e.v or 0 }
+    -- Which groups: all of them, or just the expansion picked in the right column
+    local groups, single = tab.groups, false
+    if tab.expansions and s.expansion ~= "all" then
+        for _, g in ipairs(tab.groups) do
+            if g.name == s.expansion then groups, single = { g }, true end
         end
     end
-    table.sort(list, function(a, b)
-        if (a.n > 0) ~= (b.n > 0) then return a.n > 0 end
-        if a.v ~= b.v then return a.v > b.v end
-        return a.idx < b.idx
-    end)
+
+    -- Build the display list: [group header] + its items, group by group
+    local period = s.period
+    local display = {}
+    for _, g in ipairs(groups) do
+        local items = {}
+        for idx, it in ipairs(g.items) do
+            local e = agg[period][it[1]]
+            local n = e and e.n or 0
+            if n > 0 or not s.hideEmpty then
+                items[#items + 1] = { idx = idx, id = it[1], icon = it[2], n = n, v = e and e.v or 0 }
+            end
+        end
+        table.sort(items, function(a, b)
+            if (a.n > 0) ~= (b.n > 0) then return a.n > 0 end
+            if a.v ~= b.v then return a.v > b.v end
+            return a.idx < b.idx
+        end)
+        -- placeholder groups (no items yet) stay visible unless "Hide empty" is on
+        if g.name and (single or #items > 0 or (#g.items == 0 and not s.hideEmpty)) then
+            display[#display + 1] = { header = true, name = g.name, empty = (#g.items == 0) }
+        end
+        for _, d in ipairs(items) do display[#display + 1] = d end
+    end
 
     local missingInfo = false
+    local y, itemNo = 0, 0
+
+    -- Zul'Gurub: exchange block on top of the list
+    if tab.exchange then
+        zg.frame:Show()
+        if RefreshZGBlock() then missingInfo = true end
+        y = ZG_BLOCK_H
+    else
+        zg.frame:Hide()
+    end
+
     for i, r in ipairs(rows) do
-        local d = list[i]
+        local d = display[i]
+        r:ClearAllPoints()
         if d then
-            r.itemID, r.gained, r.gainedValue = d.id, d.n, d.v
-            r.icon:SetTexture(d.icon)
-            r.icon:SetDesaturated(d.n == 0)
-
-            local name, quality = GetItemNameQuality(d.id)
-            if name then
-                r.name:SetText(name)
-                local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-                if qc then r.name:SetTextColor(qc.r, qc.g, qc.b) else r.name:SetTextColor(unpack(C.text)) end
+            r:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+            r:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
+            if d.header then
+                r:SetHeight(HEADER_H)
+                y = y + HEADER_H
+                r.itemID = nil
+                r:EnableMouse(false)
+                r.bg:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.12)
+                r.icon:Hide(); r.name:Hide(); r.count:Hide(); r.value:Hide()
+                r.plusBtn:Hide(); r.minusBtn:Hide()
+                r.hdr:SetTextColor(unpack(C.accent))
+                r.hdr:SetText(d.empty and (d.name .. "   " .. Hex(C.dim) .. T("noItemsYet") .. "|r") or d.name)
+                r.hdr:Show()
             else
-                missingInfo = true
-                r.name:SetText("Item " .. d.id)
-                r.name:SetTextColor(unpack(C.dim))
-                if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(d.id) end
+                r:SetHeight(ROW_H)
+                y = y + ROW_H
+                itemNo = itemNo + 1
+                r:EnableMouse(true)
+                r.hdr:Hide()
+                r.icon:Show(); r.name:Show(); r.count:Show(); r.value:Show()
+                if itemNo % 2 == 0 then r.bg:SetColorTexture(1, 1, 1, 0.035) else r.bg:SetColorTexture(0, 0, 0, 0) end
+
+                r.itemID, r.gained, r.gainedValue = d.id, d.n, d.v
+                r.icon:SetTexture(d.icon)
+                r.icon:SetDesaturated(d.n == 0)
+
+                local name, quality = GetItemNameQuality(d.id)
+                if name then
+                    r.name:SetText(name)
+                    local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+                    if qc then r.name:SetTextColor(qc.r, qc.g, qc.b) else r.name:SetTextColor(unpack(C.text)) end
+                else
+                    missingInfo = true
+                    r.name:SetText("Item " .. d.id)
+                    r.name:SetTextColor(unpack(C.dim))
+                    if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(d.id) end
+                end
+                if d.n == 0 then r.name:SetAlpha(0.55) else r.name:SetAlpha(1) end
+
+                local held = GetHeld(d.id)
+                r.count:SetText(string.format("%d/%d", held, d.n))
+                if d.n == 0 then
+                    r.count:SetTextColor(unpack(C.dim))
+                elseif held == 0 then
+                    r.count:SetTextColor(unpack(C.warm))
+                else
+                    r.count:SetTextColor(unpack(C.text))
+                end
+
+                if d.n == 0 or s.priceSource == "none" then
+                    r.value:SetText("-")
+                    r.value:SetTextColor(unpack(C.dim))
+                elseif d.v <= 0 then
+                    r.value:SetText(T("noPrice"))
+                    r.value:SetTextColor(unpack(C.bad))
+                else
+                    r.value:SetText(FormatGold(d.v))
+                    r.value:SetTextColor(unpack(C.good))
+                end
+
+                local showAdj = (period == "day")
+                if r.plusBtn then r.plusBtn:SetShown(showAdj) end
+                if r.minusBtn then r.minusBtn:SetShown(showAdj) end
             end
-            if d.n == 0 then r.name:SetAlpha(0.55) else r.name:SetAlpha(1) end
-
-            local held = GetHeld(d.id)
-            r.count:SetText(string.format("%d/%d", held, d.n))
-            if d.n == 0 then
-                r.count:SetTextColor(unpack(C.dim))
-            elseif held == 0 then
-                r.count:SetTextColor(unpack(C.warm))
-            else
-                r.count:SetTextColor(unpack(C.text))
-            end
-
-            if d.n == 0 or s.priceSource == "none" then
-                r.value:SetText("-")
-                r.value:SetTextColor(unpack(C.dim))
-            elseif d.v <= 0 then
-                r.value:SetText(T("noPrice"))
-                r.value:SetTextColor(unpack(C.bad))
-            else
-                r.value:SetText(FormatGold(d.v))
-                r.value:SetTextColor(unpack(C.good))
-            end
-
-            local showAdj = (period == "day")
-            if r.plusBtn then r.plusBtn:SetShown(showAdj) end
-            if r.minusBtn then r.minusBtn:SetShown(showAdj) end
-
             r:Show()
         else
             r.itemID = nil
@@ -1286,20 +2315,11 @@ function Refresh()
         end
     end
 
-    emptyText:SetShown(#list == 0)
-    content:SetHeight(math.max(1, #list * ROW_H))
+    emptyText:SetShown(#display == 0 and not tab.exchange)
+    content:SetHeight(math.max(1, y))
     UpdateScrollRange()
 
-    local green, red = "|cff73d97f", "|cfff26666"
-    if s.priceSource == "oe" then
-        footerText:SetText(string.format("%s  |  %s: %s", PeriodLabel(period), PriceModeText(),
-            OEAvailable() and (green .. "Oribos Exchange|r") or (red .. T("noOE") .. "|r")))
-    elseif s.priceSource == "auctionator" then
-        footerText:SetText(string.format("%s  |  %s: %s", PeriodLabel(period), T("srcLabel"),
-            AuctionatorAvailable() and (green .. "Auctionator|r") or (red .. T("noAuc") .. "|r")))
-    else
-        footerText:SetText(string.format("%s  |  %s", PeriodLabel(period), T("priceOff")))
-    end
+    UpdateFooter(PeriodLabel(period))
 
     if missingInfo then
         C_Timer.After(1, function() if main:IsShown() then Refresh() end end)
@@ -1412,9 +2432,16 @@ ev:SetScript("OnEvent", function(self, event, arg1)
         InitDB()
         ComputeTheme()
         charKey = UnitName("player") .. "-" .. (GetNormalizedRealmName() or GetRealmName())
+        UpdateCharData()
         SetupInteractionFilter()
         for _, it in ipairs(ITEMS) do
             if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(it[1]) end
+        end
+        if C_Item and C_Item.RequestLoadItemDataByID then
+            C_Item.RequestLoadItemDataByID(SHARD_ITEM)
+            for _, it in ipairs(ICC_ITEMS) do C_Item.RequestLoadItemDataByID(it[1]) end
+            for _, e in ipairs(ZG_EXCHANGE) do C_Item.RequestLoadItemDataByID(e[1]) end
+            C_Item.RequestLoadItemDataByID(ZG_REWARD[1])
         end
         BuildMainFrame()
         BuildMinimapButton()
@@ -1430,6 +2457,11 @@ ev:SetScript("OnEvent", function(self, event, arg1)
         self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
         self:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
         self:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
+        self:RegisterEvent("QUEST_LOG_UPDATE")
+        self:RegisterEvent("QUEST_TURNED_IN")
+        self:RegisterEvent("QUEST_DATA_LOAD_RESULT")
+        self:RegisterEvent("UPDATE_INSTANCE_INFO")
+        self:RegisterEvent("BOSS_KILL")
 
         C_Timer.NewTicker(60, function()
             if main and main:IsShown() then Refresh() end
@@ -1438,12 +2470,23 @@ ev:SetScript("OnEvent", function(self, event, arg1)
     elseif event == "PLAYER_ENTERING_WORLD" then
         suppressUntil = GetTime() + 3
         C_Timer.After(3.2, Scan)
+        if RequestRaidInfo then RequestRaidInfo() end       -- Lich King lockout -> UPDATE_INSTANCE_INFO
 
     elseif event == "BAG_UPDATE_DELAYED" then
         Scan()
 
-    elseif event == "GET_ITEM_INFO_RECEIVED" then
+    elseif event == "GET_ITEM_INFO_RECEIVED" or event == "QUEST_DATA_LOAD_RESULT" then
         RequestRefresh()
+
+    elseif event == "QUEST_LOG_UPDATE" or event == "QUEST_TURNED_IN" then
+        ScheduleCharUpdate()
+
+    elseif event == "UPDATE_INSTANCE_INFO" then
+        UpdateLockout()
+        RequestRefresh()
+
+    elseif event == "BOSS_KILL" then
+        C_Timer.After(2, function() if RequestRaidInfo then RequestRaidInfo() end end)
 
     elseif event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" then
         if ignoredTypes[arg1] then openInteractions[arg1] = true end
